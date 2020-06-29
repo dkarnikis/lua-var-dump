@@ -73,7 +73,7 @@ local function dump()
 end
 
 -- loads the log stack file and pushes all its contents in the _G table
--- userdata and functions are not handled
+-- userdata are not supported
 local function parse() 
     local lines = get_file_data(log_name)
     local line = 0
