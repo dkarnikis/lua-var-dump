@@ -1,14 +1,19 @@
 local md = require "var_dump"
 -- the file that the data will be stored
-md.init("XD")
--- declare some random global variables
-a = 24;
-b = 42;
--- dump the data into file
+md.init()
+-- define a function that we are going to serialize
+function bob(a,b)
+	return 1
+end
+-- define a number that will be serialized
+test = 1024
+-- local vars will NOT be serialized
+local not_seriliazed = "not encoded"
+-- seriliaze all the data in the log file
 md.dump()
+-- change the entry of the function to string
+bob = "XD"
 -- change the value of an already defined variable in _G
-a = 25
--- reset all defined variables to the file state
 md.parse()
--- prints 24 instead of 25
-print(a)
+-- bob is restored to function
+print(bob(1, 2))

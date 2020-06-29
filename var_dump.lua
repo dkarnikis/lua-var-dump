@@ -1,6 +1,8 @@
 local json = require "dkjson"
 local S={}
+-- file pointer
 local file = nil
+-- the default file name
 local log_name = 'log'
 
 -- checks if a file exists
@@ -24,26 +26,31 @@ end
 local function write_mem(tbl)
     local z = ""
 	local i = 0
+    -- iterate all the entries in the _G space
     for k,v in pairs(tbl) do
         if (S[k] == nil) then
             if (type(v) == "function") then
+                -- get the file of the function
                 local src = debug.getinfo(v).short_src
+                -- get the line that the function starts
                 local line = debug.getinfo(v).linedefined
+                -- get the last line of the function
                 local last_line = debug.getinfo(v).lastlinedefined
 				-- read the file
 				local buffer = get_file_data(src)
 				local func_data = ""
+                -- extract the required function lines
 				for i = line, last_line do
 					func_data = func_data .. buffer[i] .. " "
 				end
 				-- encode the type and the data 
                 z = json.encode({type(v), k, json.encode(func_data)})
-
             elseif (type(v) == "table") then 
                 z = json.encode({type(v), k, json.encode(v)})
             else
                 z = json.encode{type(v), k, json.encode(v)}
             end
+            -- append the encoded entry to the file
             file.write(file, z)
             file.write(file, '\n')
         end
@@ -69,22 +76,23 @@ end
 local function dump()
     file = io.open(log_name, 'w')
     write_mem(_G)
-    io.close(file);
+    io.close(file)
 end
 
 -- loads the log stack file and pushes all its contents in the _G table
 -- userdata are not supported
 local function parse() 
     local lines = get_file_data(log_name)
-    local line = 0
     -- print all line numbers and their contents
     for k,v in pairs(lines) do
         local var = ""
         local type_v = ""
-        local table = {}
-        local count = 0;
+        local count = 0
         -- iterate all the serialized data
         for i,v in ipairs(json.decode(v)) do
+            -- extract the type of the entry
+            -- Each entry holds 3 fields, so we are gonna iterate this for
+            -- loop 3 times for each distrinct entry
             if (count == 0) then
                 type_v = v
 			end
@@ -97,31 +105,35 @@ local function parse()
                 end
             elseif (type_v == "function") then
 				if (count >= 2) then
-					-- push our function entry to the _G 
+                    -- decode the function data
 					func = json.decode(v)
 					-- create new file and inject our function code 
 					f = io.open("hahaxd", "w")
 					f:write(func)
 					f:close()
 					-- execute the file so it creates new entry in the _G
+                    -- executing load(function_code) does not create the  
+                    -- appropriate entries in _G, or I am very bad at this
 					dofile("hahaxd")
 					-- remove the file
-					os.execute("rm hahaxd")
+					os.remove("hahaxd")
 				end
             else
                 -- not table, push it to _G
                 if (count >= 2) then
+                    -- replace the key, value to the global state
                     _G[var] = v
                 end
             end
+            -- we have extracted the type of the entry, get the contents
             if (count == 1) then
                 var = v
             end
-            count = count + 1;
+            -- counter to indicate which field of the three we are reading
+            count = count + 1
         end
     end
 end
-
 
 -- the exposed API
 return {
