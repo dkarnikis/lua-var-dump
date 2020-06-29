@@ -2,14 +2,43 @@ local json = require "dkjson"
 local S={}
 local file = nil
 local log_name = 'log'
+
+-- checks if a file exists
+local function file_exists(file)
+    local f = io.open(file, "rb")
+    if f then f:close() end
+    return f ~= nil
+end
+
+-- returns the content of the file
+local function get_file_data(file)
+    if not file_exists(file) then return {} end
+    local lines = {}
+    for line in io.lines(file) do 
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
 -- dumps the contents of _G table to the file using JSON encoding
 local function write_mem(tbl)
     local z = ""
+	local i = 0
     for k,v in pairs(tbl) do
         if (S[k] == nil) then
             if (type(v) == "function") then
-                -- unused 
-                -- z = json.encode({type(v), k})
+                local src = debug.getinfo(v).short_src
+                local line = debug.getinfo(v).linedefined
+                local last_line = debug.getinfo(v).lastlinedefined
+				-- read the file
+				local buffer = get_file_data(src)
+				local func_data = ""
+				for i = line, last_line do
+					func_data = func_data .. buffer[i] .. " "
+				end
+				-- encode the type and the data 
+                z = json.encode({type(v), k, json.encode(func_data)})
+
             elseif (type(v) == "table") then 
                 z = json.encode({type(v), k, json.encode(v)})
             else
@@ -18,11 +47,8 @@ local function write_mem(tbl)
             file.write(file, z)
             file.write(file, '\n')
         end
+		z = ""
     end
-end
-
-local function __LINE__()
-    return debug.getinfo(2, 'l').currentline
 end
 
 -- Prepares the _G and marks the system variables
@@ -42,27 +68,8 @@ end
 -- functions are not dumped
 local function dump()
     file = io.open(log_name, 'w')
-    file.write(file, json.encode({"line", __LINE__() + 1}))
-    file.write(file, "\n");
     write_mem(_G)
     io.close(file);
-end
-
--- checks if a file exists
-local function file_exists(file)
-    local f = io.open(file, "rb")
-    if f then f:close() end
-    return f ~= nil
-end
-
--- returns the content of the file
-local function get_file_data(file)
-    if not file_exists(file) then return {} end
-    lines = {}
-    for line in io.lines(file) do 
-        lines[#lines + 1] = line
-    end
-    return lines
 end
 
 -- loads the log stack file and pushes all its contents in the _G table
@@ -75,21 +82,32 @@ local function parse()
         local var = ""
         local type_v = ""
         local table = {}
-        count = 0;
+        local count = 0;
         -- iterate all the serialized data
         for i,v in ipairs(json.decode(v)) do
             if (count == 0) then
                 type_v = v
-            end
-            if (type_v == "line") then
-                line = tonumber(v)
-            elseif (type_v == "table") then
+			end
+            if (type_v == "table") then
                 if (count >= 2) then
                     -- we got the table
                     table = json.decode(v)
                     -- push it to _G
                     _G[var] = table
                 end
+            elseif (type_v == "function") then
+				if (count >= 2) then
+					-- push our function entry to the _G 
+					func = json.decode(v)
+					-- create new file and inject our function code 
+					f = io.open("hahaxd", "w")
+					f:write(func)
+					f:close()
+					-- execute the file so it creates new entry in the _G
+					dofile("hahaxd")
+					-- remove the file
+					os.execute("rm hahaxd")
+				end
             else
                 -- not table, push it to _G
                 if (count >= 2) then
@@ -102,8 +120,8 @@ local function parse()
             count = count + 1;
         end
     end
-    return line
 end
+
 
 -- the exposed API
 return {
